@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Простий Чат</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        #messages {
+            height: 60vh;
+            overflow-y: scroll;
+            border: 1px solid #dee2e6;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            background-color: #fff;
+        }
+        #chat-container { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        
+        <!-- Секція входу -->
+        <div id="login-container" class="card p-4 mx-auto" style="max-width: 400px;">
+            <h3 class="text-center">Приєднатися до чату</h3>
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="username" class="form-label">Ваше ім'я:</label>
+                    <input type="text" id="username" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Увійти</button>
+            </form>
+        </div>
+
+        <!-- Секція чату (прихована за замовчуванням) -->
+        <div id="chat-container">
+            <h1 class="text-center mb-2">FastAPI Чат</h1>
+            <p class="text-center">Ви увійшли як: <b id="username-display"></b> | Активних користувачів: <b id="active-users-count">0</b></p>
+            
+            <div id="messages" class="mb-3"></div>
+
+            <form id="messageForm">
+                <div class="input-group">
+                    <input type="text" id="messageText" class="form-control" placeholder="Введіть повідомлення..." autocomplete="off" disabled/>
+                    <button id="sendButton" class="btn btn-primary" disabled>Надіслати</button>
+                </div>
+            </form>
+        </div>
+
+        <hr>
+        
+        <!-- Секція реєстрації -->
+        <div class="row mt-4">
+            <div class="col-md-6 mx-auto">
+                <h4>Реєстрація нового користувача</h4>
+                <form id="registerForm">
+                    <div class="mb-2">
+                        <input type="text" id="regUsername" class="form-control" placeholder="Ім'я користувача" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="password" id="regPassword" class="form-control" placeholder="Пароль" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Зареєструватися</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        const loginForm = document.getElementById('loginForm');
+        const loginContainer = document.getElementById('login-container');
+        const chatContainer = document.getElementById('chat-container');
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageText');
+        const sendButton = document.getElementById('sendButton');
+        const messagesDiv = document.getElementById('messages');
+        const usernameDisplay = document.getElementById('username-display');
+
+        loginForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            if (!username) {
+                alert("Ім'я користувача є обов'язковим!");
+                return;
+            }
+
+            usernameDisplay.textContent = username;
+            loginContainer.style.display = 'none';
+            chatContainer.style.display = 'block';
+
+            connectWebSocket(username);
+        });
+
+        function connectWebSocket(username) {
+            // Визначаємо правильний протокол для WebSocket
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/${username}`;
+            
+            console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function(event) {
+                    console.log("WebSocket connection established successfully (onopen event fired).");
+                    addMessageToBox(`Ви підключились до чату як ${username}.`);
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                };
+
+                ws.onmessage = function(event) {
+                    console.log("Received message:", event.data);
+                    addMessageToBox(event.data);
+                };
+
+                ws.onclose = function(event) {
+                    console.log("WebSocket connection closed.", event);
+                    addMessageToBox("З'єднання втрачено. Спробуйте оновити сторінку.");
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                };
+
+                ws.onerror = function(event) {
+                    console.error("WebSocket error observed:", event);
+                    addMessageToBox("Сталася помилка з'єднання.");
+                };
+            } catch (error) {
+                console.error("Failed to create WebSocket object:", error);
+                alert("Не вдалося створити WebSocket. Перевірте консоль розробника.");
+            }
+        }
+
+        messageForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const message = messageInput.value;
+            if (ws && ws.readyState === WebSocket.OPEN && message) {
+                ws.send(message);
+                messageInput.value = '';
+            }
+        });
+
+        function addMessageToBox(message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // Реєстрація (залишається без змін)
+        document.getElementById('registerForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const regUsername = document.getElementById('regUsername').value;
+            const regPassword = document.getElementById('regPassword').value;
+            
+            const formData = new FormData();
+            formData.append('username', regUsername);
+            formData.append('password', regPassword);
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                } else {
+                    alert(`Помилка: ${result.detail}`);
+                }
+            } catch (error) {
+                console.error('Помилка реєстрації:', error);
+                alert('Сталася помилка під час реєстрації.');
+            }
+        });
+
+        // Оновлення лічильника активних користувачів (залишається без змін)
+        async function updateActiveUsers() {
+            try {
+                const response = await fetch('/active-users');
+                const data = await response.json();
+                document.getElementById('active-users-count').textContent = data.active_users;
+            } catch (error) {
+                console.error("Не вдалося оновити лічильник:", error);
+            }
+        }
+        
+        setInterval(updateActiveUsers, 5000);
+        updateActiveUsers();
+    </script>
+</body>
+</html>

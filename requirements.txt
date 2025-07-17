@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pymongo
+redis
+passlib
+bcrypt
+jinja2
+python-multipart
